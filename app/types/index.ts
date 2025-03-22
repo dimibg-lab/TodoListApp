@@ -1,5 +1,11 @@
 export type Priority = 'high' | 'medium' | 'low';
 
+export interface WeatherRecommendation {
+  timestamp: Date;
+  recommended: boolean;
+  message: string;
+}
+
 export interface Todo {
   id: string;
   title: string;
@@ -12,6 +18,16 @@ export interface Todo {
   createdAt: Date;
   updatedAt: Date;
   listId: string;
+  location?: {
+    name: string;
+    latitude: number;
+    longitude: number;
+    radius: number;
+    triggered: boolean;
+  };
+  isOutdoor?: boolean;
+  weatherChecked?: Date;
+  weatherRecommendation?: WeatherRecommendation;
 }
 
 export interface TodoList {
@@ -38,4 +54,17 @@ export interface Notification {
 
 export type TodoFilter = 'all' | 'completed' | 'active';
 export type TodoSortOption = 'dueDate' | 'priority' | 'title';
-export type TodoSortDirection = 'asc' | 'desc'; 
+export type TodoSortDirection = 'asc' | 'desc';
+
+export interface Idea {
+  id: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  isFavorite: boolean;
+}
+
+export type IdeasFilter = 'all' | 'favorites';
+export type IdeasSortOption = 'createdAt' | 'title'; 

@@ -124,26 +124,38 @@ const CalendarScreen = () => {
   const formatSelectedDate = () => {
     if (!selectedDate) return '';
     
-    let options: Intl.DateTimeFormatOptions; 
-    
-    if (IS_SMALL_SCREEN) {
-      // Съкратен формат за малки екрани
-      options = { 
-        day: 'numeric', 
-        month: 'short',
-        weekday: 'short'
-      };
-    } else {
-      // Пълен формат за нормални екрани
-      options = { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      };
+    try {
+      const dateObj = new Date(selectedDate);
+      
+      // Проверка дали dateObj е валидна дата
+      if (isNaN(dateObj.getTime())) {
+        return 'Невалидна дата';
+      }
+      
+      let options: Intl.DateTimeFormatOptions; 
+      
+      if (IS_SMALL_SCREEN) {
+        // Съкратен формат за малки екрани
+        options = { 
+          day: 'numeric', 
+          month: 'short',
+          weekday: 'short'
+        };
+      } else {
+        // Пълен формат за нормални екрани
+        options = { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        };
+      }
+      
+      return dateObj.toLocaleDateString('bg-BG', options);
+    } catch (error) {
+      console.error('Грешка при форматиране на дата:', error);
+      return 'Грешка';
     }
-    
-    return new Date(selectedDate).toLocaleDateString('bg-BG', options);
   };
 
   // Рендерира елемент от списъка със задачи
@@ -200,10 +212,24 @@ const CalendarScreen = () => {
                   color={getColor('textLight')} 
                 />
                 <Text style={[styles.dueDateText, { color: getColor('textLight') }]}>
-                  {new Date(item.dueDate).toLocaleTimeString('bg-BG', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
+                  {(() => {
+                    try {
+                      const dueDate = new Date(item.dueDate);
+                      
+                      // Проверка дали dueDate е валидна дата
+                      if (isNaN(dueDate.getTime())) {
+                        return 'Невалидна дата';
+                      }
+                      
+                      return dueDate.toLocaleTimeString('bg-BG', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      });
+                    } catch (error) {
+                      console.error('Грешка при форматиране на време:', error);
+                      return 'Грешка';
+                    }
+                  })()}
                 </Text>
               </View>
             )}

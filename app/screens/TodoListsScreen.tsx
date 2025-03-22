@@ -16,6 +16,7 @@ import { BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, SPACING } from '../constants/the
 import { TodoListsScreenProps } from '../navigation/types';
 import { TodoList } from '../types';
 import { CommonActions } from '@react-navigation/native';
+import CustomListItem from '../components/CustomListItemComponent';
 
 const TodoListsScreen: React.FC<TodoListsScreenProps> = ({ navigation }) => {
   const { lists, todos, deleteList, activeListId, setActiveList } = useTodo();
@@ -101,11 +102,23 @@ const TodoListsScreen: React.FC<TodoListsScreenProps> = ({ navigation }) => {
 
   // Форматиране на дата
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('bg-BG', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
+    if (!date) return 'Няма дата';
+    
+    // Проверка дали date е валидна дата
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      return 'Невалидна дата';
+    }
+    
+    try {
+      return date.toLocaleDateString('bg-BG', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch (error) {
+      console.error('Грешка при форматиране на дата:', error);
+      return 'Грешка';
+    }
   };
 
   // Рендериране на отделен списък
@@ -247,11 +260,13 @@ const TodoListsScreen: React.FC<TodoListsScreenProps> = ({ navigation }) => {
 
       {lists.length > 0 && (
         <View style={styles.buttonContainer}>
-          <Button
-            title="Нов списък"
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: getColor('primary') }]}
             onPress={handleAddList}
-            leftIcon={<MaterialIcons name="add" size={24} color="#FFFFFF" />}
-          />
+          >
+            <MaterialIcons name="add" size={22} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Нов списък</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -314,12 +329,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    margin: SPACING.xs,
+    justifyContent: 'center',
+    paddingVertical: SPACING.s,
+    paddingHorizontal: SPACING.m,
+    borderRadius: BORDER_RADIUS.l,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: FONT_SIZE.s,
+    fontWeight: FONT_WEIGHT.medium as any,
+    marginLeft: SPACING.xs,
   },
   buttonContainer: {
     position: 'absolute',

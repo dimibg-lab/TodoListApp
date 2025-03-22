@@ -6,7 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
+  Animated,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,280 +33,194 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     lists,
     activeListId,
     setActiveList,
+    reloadDataFromStorage
   } = useTodo();
   const { userSettings } = useUser();
   const { getColor } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0)); // За анимация на зареждане
 
-  // Справяне с клик върху задача
-  const handleTodoPress = (todo: Todo) => {
-    navigation.navigate('TodoDetails', { todoId: todo.id });
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  // Добавяме фокус слушател за опресняване
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Опресняваме данните автоматично при връщане към екрана
+      console.log('HomeScreen: ФОКУС ПОЛУЧЕН, ОБНОВЯВАМЕ ДАННИ');
+      setRefreshing(true);
+      
+      // Презареждаме данните от AsyncStorage
+      reloadDataFromStorage().then(count => {
+        console.log(`HomeScreen: ПРЕЗАРЕДЕНИ ${count} ЗАДАЧИ ОТ ASYNCSTORAGE`);
+        // Симулираме забавяне за по-добро потребителско преживяване
+        setTimeout(() => {
+          setRefreshing(false);
+          console.log('HomeScreen: ОБНОВЯВАНЕТО ПРИКЛЮЧИ');
+        }, 500);
+      }).catch(error => {
+        console.error('HomeScreen: ГРЕШКА ПРИ ПРЕЗАРЕЖДАНЕ НА ДАННИ:', error);
+        setRefreshing(false);
+      });
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  // Изчисление на прогрес
+  const completedCount = todos.filter((t) => t.completed).length;
+  const progress = todos.length > 0 ? (completedCount / todos.length) * 100 : 0;
+
+  // Динамично приветствие
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Добро утро';
+    if (hour >= 12 && hour < 18) return 'Добър ден';
+    return 'Добър вечер';
   };
 
-  // Справяне с превключване на изпълнена задача
-  const handleToggleComplete = (id: string) => {
-    toggleTodoCompleted(id);
-  };
-
-  // Добавяне на нова задача
-  const handleAddTodo = () => {
-    navigation.navigate('AddEditTodo', { listId: activeListId || undefined });
-  };
-
-  // Търсене на задачи
-  const handleSearch = () => {
-    navigation.navigate('SearchTodos');
-  };
-
-  // Промяна на филтъра
-  const handleFilterChange = (newFilter: TodoFilter) => {
-    setFilter(newFilter);
-  };
-
-  // Промяна на сортировката
+  // Обработка на действия
+  const handleTodoPress = (todo: Todo) => navigation.navigate('TodoDetails', { todoId: todo.id });
+  const handleAddTodo = () => navigation.navigate('AddEditTodo', { listId: activeListId || undefined });
+  const handleSearch = () => navigation.navigate('SearchTodos');
+  const handleToggleComplete = (id: string) => toggleTodoCompleted(id);
+  const handleFilterChange = (newFilter: TodoFilter) => setFilter(newFilter);
   const handleSortChange = (option: TodoSortOption) => {
-    if (sortBy === option) {
-      // Ако избраната опция е същата, обърнете посоката
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(option);
-      setSortDirection('asc');
-    }
+    setSortBy(option);
+    setSortDirection(sortBy === option && sortDirection === 'asc' ? 'desc' : 'asc');
   };
-
-  // Промяна на активния списък
   const handleListChange = () => {
-    // Показване на лист с наличните списъци
-    if (lists.length <= 1) {
-      // Навигация към таба с TodoLists
-      navigation.dispatch(
-        CommonActions.navigate({
-          name: 'TodoLists'
-        })
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Избиране на списък',
-      'Изберете списък със задачи',
-      [
-        ...lists.map(list => ({
-          text: list.name,
-          onPress: () => setActiveList(list.id),
-        })),
-        {
-          text: 'Всички задачи',
-          onPress: () => setActiveList(null),
-        },
-        {
-          text: 'Отказ',
-          style: 'cancel',
-        },
-      ],
+    // Използваме CommonActions.navigate вместо директно navigation.navigate
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'TodoLists',
+      })
     );
   };
 
   // Pull to refresh
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = () => {
+    console.log('HomeScreen: ЗАПОЧНА ОБНОВЯВАНЕ (РЪЧНО)');
     setRefreshing(true);
-    // Тук можем да заредим отново данните, ако е необходимо
-    setTimeout(() => {
+    
+    // Презареждаме данните от AsyncStorage
+    reloadDataFromStorage().then(count => {
+      console.log(`HomeScreen: ПРЕЗАРЕДЕНИ ${count} ЗАДАЧИ ОТ ASYNCSTORAGE (РЪЧНО)`);
+      setTimeout(() => {
+        setRefreshing(false);
+        console.log('HomeScreen: ОБНОВЯВАНЕТО ПРИКЛЮЧИ (РЪЧНО)');
+      }, 500);
+    }).catch(error => {
+      console.error('HomeScreen: ГРЕШКА ПРИ ПРЕЗАРЕЖДАНЕ НА ДАННИ (РЪЧНО):', error);
       setRefreshing(false);
-    }, 1000);
-  }, []);
+    });
+  };
 
-  // Рендериране на празен списък
-  const renderEmptyList = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialIcons name="check-circle" size={64} color={getColor('disabled')} />
-      <Text style={[styles.emptyText, { color: getColor('textLight') }]}>
-        {filter === 'all'
-          ? 'Нямате задачи. Добавете нови, като натиснете бутона долу.'
-          : filter === 'completed'
-          ? 'Нямате изпълнени задачи.'
-          : 'Нямате активни задачи.'}
-      </Text>
-    </View>
-  );
-
-  // Рендериране на заглавието
-  const renderTitle = () => {
-    const activeList = lists.find(list => list.id === activeListId);
-    const currentHour = new Date().getHours();
-    
-    let greetingText = 'Здравей';
-    if (currentHour >= 5 && currentHour < 12) {
-      greetingText = 'Добро утро';
-    } else if (currentHour >= 12 && currentHour < 18) {
-      greetingText = 'Добър ден';
-    } else if (currentHour >= 18 && currentHour < 23) {
-      greetingText = 'Добър вечер';
-    }
-    
-    const userName = userSettings.name ? `, ${userSettings.name}` : '';
-    
+  // Рендериране на заглавие с прогрес
+  const renderHeader = () => {
+    const activeList = lists.find((list) => list.id === activeListId);
     return (
-      <View style={styles.titleContainer}>
+      <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
         <Text style={[styles.greeting, { color: getColor('text') }]}>
-          {`${greetingText}${userName}!`}
+          {`${getGreeting()}, ${userSettings.name || 'Потребител'}!`}
         </Text>
         <TouchableOpacity
           style={[styles.listSelector, { backgroundColor: getColor('surface') }]}
           onPress={handleListChange}
         >
-          <Text style={[styles.listName, { color: getColor('text') }]} numberOfLines={1}>
-            {activeList ? activeList.name : 'Всички задачи'}
+          <Text style={[styles.listName, { color: getColor('text') }]}>
+            {activeList?.name || 'Всички задачи'}
           </Text>
           <MaterialIcons name="arrow-drop-down" size={24} color={getColor('text')} />
         </TouchableOpacity>
-      </View>
+        <View style={styles.progressContainer}>
+          <View
+            style={[
+              styles.progressBar,
+              { width: `${progress}%`, backgroundColor: getColor('primary') },
+            ]}
+          />
+        </View>
+        <Text style={[styles.progressText, { color: getColor('textLight') }]}>
+          {completedCount} от {todos.length} завършени
+        </Text>
+      </Animated.View>
     );
   };
 
-  // Рендериране на контролите за филтриране
-  const renderFilterControls = () => (
-    <View style={styles.controlsContainer}>
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === 'all' && [styles.activeFilterButton, { backgroundColor: getColor('primary') }],
-          ]}
-          onPress={() => handleFilterChange('all')}
-        >
-          <Text
+  // Рендериране на филтри и сортиране
+  const renderControls = () => (
+    <View style={styles.controls}>
+      <View style={styles.filterRow}>
+        {['all', 'active', 'completed'].map((f) => (
+          <TouchableOpacity
+            key={f}
             style={[
-              styles.filterButtonText,
-              filter === 'all' && styles.activeFilterText,
-              { color: filter === 'all' ? '#FFFFFF' : getColor('text') },
+              styles.filterButton,
+              filter === f && { backgroundColor: getColor('primary') },
             ]}
+            onPress={() => handleFilterChange(f as TodoFilter)}
           >
-            Всички
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === 'active' && [styles.activeFilterButton, { backgroundColor: getColor('primary') }],
-          ]}
-          onPress={() => handleFilterChange('active')}
-        >
-          <Text
-            style={[
-              styles.filterButtonText,
-              filter === 'active' && styles.activeFilterText,
-              { color: filter === 'active' ? '#FFFFFF' : getColor('text') },
-            ]}
-          >
-            Активни
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === 'completed' && [styles.activeFilterButton, { backgroundColor: getColor('primary') }],
-          ]}
-          onPress={() => handleFilterChange('completed')}
-        >
-          <Text
-            style={[
-              styles.filterButtonText,
-              filter === 'completed' && styles.activeFilterText,
-              { color: filter === 'completed' ? '#FFFFFF' : getColor('text') },
-            ]}
-          >
-            Изпълнени
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.filterText,
+                { color: filter === f ? '#FFF' : getColor('text') },
+              ]}
+            >
+              {f === 'all' ? 'Всички' : f === 'active' ? 'Активни' : 'Изпълнени'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      
-      <View style={styles.divider} />
-      
-      <Text style={[styles.sortTitle, { color: getColor('textLight') }]}>
-        Сортиране по:
+      <View style={styles.sortRow}>
+        {['dueDate', 'priority', 'title'].map((option) => (
+          <TouchableOpacity
+            key={option}
+            style={[styles.sortButton, sortBy === option && styles.activeSort]}
+            onPress={() => handleSortChange(option as TodoSortOption)}
+          >
+            <MaterialIcons
+              name={sortDirection === 'asc' ? 'arrow-upward' : 'arrow-downward'}
+              size={16}
+              color={sortBy === option ? getColor('primary') : getColor('textLight')}
+            />
+            <Text
+              style={[
+                styles.sortText,
+                { color: sortBy === option ? getColor('primary') : getColor('textLight') },
+              ]}
+            >
+              {option === 'dueDate' ? 'Дата' : option === 'priority' ? 'Приоритет' : 'Име'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
+  // Рендериране на празен списък
+  const renderEmpty = () => (
+    <View style={styles.empty}>
+      <MaterialIcons name="check-circle-outline" size={60} color={getColor('disabled')} />
+      <Text style={[styles.emptyText, { color: getColor('textLight') }]}>
+        {filter === 'all'
+          ? 'Няма задачи. Добави първата си!'
+          : filter === 'active'
+          ? 'Няма активни задачи.'
+          : 'Няма завършени задачи.'}
       </Text>
-      
-      <View style={styles.sortContainer}>
-        <TouchableOpacity
-          style={[
-            styles.sortButton,
-            sortBy === 'dueDate' && styles.activeSortButton
-          ]}
-          onPress={() => handleSortChange('dueDate')}
-        >
-          <MaterialIcons
-            name={sortDirection === 'asc' ? 'arrow-upward' : 'arrow-downward'}
-            size={18}
-            color={sortBy === 'dueDate' ? getColor('primary') : getColor('textLight')}
-          />
-          <Text
-            style={[
-              styles.sortButtonText,
-              {
-                color: sortBy === 'dueDate' ? getColor('primary') : getColor('textLight'),
-              },
-            ]}
-          >
-            Дата
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.sortButton,
-            sortBy === 'priority' && styles.activeSortButton
-          ]}
-          onPress={() => handleSortChange('priority')}
-        >
-          <MaterialIcons
-            name={sortDirection === 'asc' ? 'arrow-upward' : 'arrow-downward'}
-            size={18}
-            color={sortBy === 'priority' ? getColor('primary') : getColor('textLight')}
-          />
-          <Text
-            style={[
-              styles.sortButtonText,
-              {
-                color: sortBy === 'priority' ? getColor('primary') : getColor('textLight'),
-              },
-            ]}
-          >
-            Приоритет
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.sortButton,
-            sortBy === 'title' && styles.activeSortButton
-          ]}
-          onPress={() => handleSortChange('title')}
-        >
-          <MaterialIcons
-            name={sortDirection === 'asc' ? 'arrow-upward' : 'arrow-downward'}
-            size={18}
-            color={sortBy === 'title' ? getColor('primary') : getColor('textLight')}
-          />
-          <Text
-            style={[
-              styles.sortButtonText,
-              {
-                color: sortBy === 'title' ? getColor('primary') : getColor('textLight'),
-              },
-            ]}
-          >
-            Име
-          </Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: getColor('background') }]}>
-      {renderTitle()}
-      
-      {renderFilterControls()}
-      
+      {renderHeader()}
+      {renderControls()}
       <FlatList
         data={todos}
         keyExtractor={(item) => item.id}
@@ -317,20 +231,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             onToggleComplete={handleToggleComplete}
           />
         )}
+        ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={renderEmptyList}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[getColor('primary')]}
-            tintColor={getColor('primary')}
           />
         }
       />
-      
-      <View style={styles.bottomContainer}>
+      <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.searchButton, { backgroundColor: getColor('surface') }]}
           onPress={handleSearch}
@@ -340,8 +252,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <Button
           title="Нова задача"
           onPress={handleAddTodo}
+          leftIcon={<MaterialIcons name="add" size={24} color="#FFF" />}
           style={styles.addButton}
-          leftIcon={<MaterialIcons name="add" size={24} color="#FFFFFF" />}
         />
       </View>
     </SafeAreaView>
@@ -349,74 +261,62 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  titleContainer: {
+  container: { flex: 1 },
+  header: {
     padding: SPACING.m,
     paddingBottom: SPACING.s,
   },
   greeting: {
-    fontSize: FONT_SIZE.l,
+    fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold as any,
-    marginBottom: SPACING.m,
   },
   listSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BORDER_RADIUS.m,
     padding: SPACING.s,
+    borderRadius: BORDER_RADIUS.m,
+    marginTop: SPACING.s,
     alignSelf: 'flex-start',
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
   },
   listName: {
-    fontSize: FONT_SIZE.l,
-    fontWeight: FONT_WEIGHT.bold as any,
+    fontSize: FONT_SIZE.m,
+    fontWeight: FONT_WEIGHT.medium as any,
     marginRight: SPACING.xs,
   },
-  controlsContainer: {
-    padding: SPACING.m,
-    paddingTop: 0,
+  progressContainer: {
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 2,
+    marginTop: SPACING.s,
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: FONT_SIZE.xs,
+    marginTop: SPACING.xs,
+  },
+  controls: {
+    paddingHorizontal: SPACING.m,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: SPACING.s,
   },
-  filterContainer: {
-    flexDirection: 'row',
-    marginBottom: SPACING.m,
-    justifyContent: 'space-around',
-  },
   filterButton: {
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.m,
-    borderRadius: BORDER_RADIUS.round,
-    minWidth: 90,
+    flex: 1,
+    padding: SPACING.s,
+    borderRadius: BORDER_RADIUS.m,
     alignItems: 'center',
+    marginHorizontal: SPACING.xs,
   },
-  activeFilterButton: {
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
-  filterButtonText: {
+  filterText: {
     fontSize: FONT_SIZE.s,
     fontWeight: FONT_WEIGHT.medium as any,
   },
-  activeFilterText: {
-    fontWeight: FONT_WEIGHT.bold as any,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginBottom: SPACING.s,
-  },
-  sortTitle: {
-    fontSize: FONT_SIZE.xs,
-    marginBottom: SPACING.xs,
-  },
-  sortContainer: {
+  sortRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
   },
@@ -426,52 +326,48 @@ const styles = StyleSheet.create({
     marginRight: SPACING.m,
     paddingVertical: SPACING.xs,
   },
-  activeSortButton: {
+  activeSort: {
     borderBottomWidth: 2,
     borderBottomColor: 'currentColor',
   },
-  sortButtonText: {
-    fontSize: FONT_SIZE.xs,
-    marginLeft: 2,
+  sortText: {
+    fontSize: FONT_SIZE.s,
+    marginLeft: SPACING.xs,
   },
   listContent: {
-    paddingHorizontal: SPACING.m,
+    padding: SPACING.m,
     flexGrow: 1,
   },
   separator: {
-    height: SPACING.xs,
+    height: SPACING.s,
   },
-  emptyContainer: {
-    marginTop: SPACING.xl,
+  empty: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.l,
   },
   emptyText: {
-    marginTop: SPACING.m,
-    textAlign: 'center',
     fontSize: FONT_SIZE.m,
+    textAlign: 'center',
+    marginTop: SPACING.m,
   },
-  bottomContainer: {
+  footer: {
     flexDirection: 'row',
     padding: SPACING.m,
     alignItems: 'center',
   },
   searchButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.m,
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
   },
   addButton: {
     flex: 1,
   },
 });
 
-export default HomeScreen; 
+export default HomeScreen;

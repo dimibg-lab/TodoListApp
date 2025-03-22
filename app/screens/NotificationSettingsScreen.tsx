@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,9 +27,22 @@ interface NotificationSettings {
   quietHoursEnabled: boolean;
   quietHoursStart: string;
   quietHoursEnd: string;
+  customSoundsEnabled: boolean;
 }
 
-const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = () => {
+// Типове известия, за които можем да персонализираме звука
+export type NotificationType = 'default' | 'task' | 'urgent' | 'reminder' | 'dailySummary';
+
+// Имена на типовете известия на български
+const notificationTypeLabels: Record<NotificationType, string> = {
+  default: 'Стандартно известие',
+  task: 'Задачи',
+  urgent: 'Спешни задачи',
+  reminder: 'Напомняния',
+  dailySummary: 'Дневен отчет'
+};
+
+const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({ navigation }) => {
   const { getColor } = useAppTheme();
   
   // Настройки за известията (тук са със стойности по подразбиране)
@@ -44,7 +57,47 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
     quietHoursEnabled: false,
     quietHoursStart: '22:00',
     quietHoursEnd: '07:00',
+    customSoundsEnabled: false,
   });
+
+  // Звуци за типовете известия
+  const [notificationSounds, setNotificationSounds] = useState<Record<NotificationType, string>>({
+    default: 'default',
+    task: 'default',
+    urgent: 'default',
+    reminder: 'default',
+    dailySummary: 'default'
+  });
+
+  // Зареждане на настройките при стартиране
+  useEffect(() => {
+    loadSettings();
+    loadSounds();
+  }, []);
+
+  // Функция за зареждане на настройките от AsyncStorage
+  const loadSettings = async () => {
+    try {
+      const savedSettings = await AsyncStorage.getItem('notificationSettings');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
+      }
+    } catch (error) {
+      console.error('Грешка при зареждане на настройките:', error);
+    }
+  };
+
+  // Функция за зареждане на звуците от AsyncStorage
+  const loadSounds = async () => {
+    try {
+      const savedSounds = await AsyncStorage.getItem('notificationSounds');
+      if (savedSounds) {
+        setNotificationSounds({ ...notificationSounds, ...JSON.parse(savedSounds) });
+      }
+    } catch (error) {
+      console.error('Грешка при зареждане на звуците:', error);
+    }
+  };
 
   // Функция за промяна на настройка
   const toggleSetting = (setting: keyof NotificationSettings) => {
@@ -72,6 +125,32 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
     }
   };
 
+  // Отваряне на екрана за избор на звук за конкретен тип известие
+  const goToSoundSelection = (type: NotificationType) => {
+    if (!settings.customSoundsEnabled || !settings.enabled) {
+      Alert.alert(
+        'Персонализираните звуци са изключени',
+        'За да изберете различни звуци, моля първо включете опцията за персонализирани звуци.'
+      );
+      return;
+    }
+
+    navigation.navigate('NotificationSound', { type });
+  };
+
+  // Получаване на името на избрания звук за показване
+  const getSoundName = (soundId: string): string => {
+    switch (soundId) {
+      case 'default':
+        return 'Стандартен';
+      case 'none':
+        return 'Без звук';
+      default:
+        // Тук би трябвало да има логика за намиране името на звука по ID
+        return 'Персонализиран';
+    }
+  };
+
   // Възстановяване на настройки по подразбиране
   const resetToDefaults = () => {
     Alert.alert(
@@ -94,9 +173,25 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
               quietHoursEnabled: false,
               quietHoursStart: '22:00',
               quietHoursEnd: '07:00',
+              customSoundsEnabled: false,
             };
             setSettings(defaultSettings);
             saveSettings(defaultSettings);
+            
+            // Също възстановяваме звуците по подразбиране
+            const defaultSounds: Record<NotificationType, string> = {
+              default: 'default',
+              task: 'default',
+              urgent: 'default',
+              reminder: 'default',
+              dailySummary: 'default'
+            };
+            setNotificationSounds(defaultSounds);
+            try {
+              AsyncStorage.setItem('notificationSounds', JSON.stringify(defaultSounds));
+            } catch (error) {
+              console.error('Грешка при възстановяване на звуците:', error);
+            }
           }
         }
       ]
@@ -182,10 +277,10 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
           <View style={[styles.settingRow, { borderBottomColor: getColor('border') }]}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingTitle, { color: getColor('text') }]}>
-                Известия за срок
+                Известия за краен срок
               </Text>
               <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
-                Получавайте известия за наближаващи срокове
+                Получавайте известия в деня на крайния срок
               </Text>
             </View>
             <Switch
@@ -200,7 +295,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
           <View style={[styles.settingRow, { borderBottomColor: getColor('border') }]}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingTitle, { color: getColor('text') }]}>
-                Известия за просрочване
+                Просрочени задачи
               </Text>
               <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
                 Получавайте известия за просрочени задачи
@@ -218,10 +313,10 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingTitle, { color: getColor('text') }]}>
-                Дневна сводка
+                Дневен отчет
               </Text>
               <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
-                Получавайте дневна сводка с предстоящите ви задачи
+                Получавайте дневен отчет за задачите
               </Text>
             </View>
             <Switch
@@ -234,7 +329,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
           </View>
         </View>
 
-        {/* Настройки за звук и вибрация */}
+        {/* Звук и вибрация */}
         <View style={[styles.section, { backgroundColor: getColor('surface'), opacity: settings.enabled ? 1 : 0.5 }]}>
           <Text style={[styles.sectionHeader, { color: getColor('textLight') }]}>
             ЗВУК И ВИБРАЦИЯ
@@ -257,6 +352,24 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
               disabled={!settings.enabled}
             />
           </View>
+
+          <View style={[styles.settingRow, { borderBottomColor: getColor('border') }]}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: getColor('text') }]}>
+                Персонализирани звуци
+              </Text>
+              <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
+                Използване на различни звуци за типове известия
+              </Text>
+            </View>
+            <Switch
+              value={settings.customSoundsEnabled && settings.soundEnabled && settings.enabled}
+              onValueChange={() => toggleSetting('customSoundsEnabled')}
+              trackColor={{ false: getColor('disabled'), true: getColor('primary') }}
+              thumbColor="#FFFFFF"
+              disabled={!settings.enabled || !settings.soundEnabled}
+            />
+          </View>
           
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
@@ -276,6 +389,37 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
             />
           </View>
         </View>
+
+        {/* Персонализирани звуци за известия */}
+        {settings.customSoundsEnabled && settings.soundEnabled && settings.enabled && (
+          <View style={[styles.section, { backgroundColor: getColor('surface') }]}>
+            <Text style={[styles.sectionHeader, { color: getColor('textLight') }]}>
+              ЗВУЦИ ЗА РАЗЛИЧНИ ТИПОВЕ ИЗВЕСТИЯ
+            </Text>
+            
+            {Object.entries(notificationTypeLabels).map(([type, label]) => (
+              <TouchableOpacity
+                key={type}
+                style={[styles.settingRow, type !== 'dailySummary' ? { borderBottomColor: getColor('border') } : {}]}
+                onPress={() => goToSoundSelection(type as NotificationType)}
+              >
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingTitle, { color: getColor('text') }]}>
+                    {label}
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
+                    {getSoundName(notificationSounds[type as NotificationType])}
+                  </Text>
+                </View>
+                <MaterialIcons 
+                  name="chevron-right" 
+                  size={24} 
+                  color={getColor('textLight')} 
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Спокойни часове */}
         <View style={[styles.section, { backgroundColor: getColor('surface'), opacity: settings.enabled ? 1 : 0.5 }]}>
@@ -320,30 +464,35 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ()
 
         {/* Бутони за действия */}
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              { backgroundColor: getColor('primary'), marginRight: SPACING.m }
-            ]}
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: getColor('primary') }]}
             onPress={testNotification}
           >
-            <MaterialIcons name="notifications-active" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Тест на известие</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: getColor('error') }]}
-            onPress={resetToDefaults}
-          >
-            <MaterialIcons name="settings-backup-restore" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Възстанови</Text>
+            <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Тестово известие</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.infoContainer}>
-          <MaterialIcons name="info-outline" size={20} color={getColor('textLight')} style={styles.infoIcon} />
-          <Text style={[styles.infoText, { color: getColor('textLight') }]}>
-            Уверете се, че сте предоставили разрешения за известия в системните настройки на устройството.
+        <View style={styles.actions}>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: getColor('error') }]}
+            onPress={resetToDefaults}
+          >
+            <MaterialIcons name="restore" size={20} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Възстановяване на настройки</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.infoContainer, { backgroundColor: `${getColor('info')}20` }]}>
+          <MaterialIcons 
+            name="info" 
+            size={20} 
+            color={getColor('info')} 
+            style={styles.infoIcon}
+          />
+          <Text style={[styles.infoText, { color: getColor('text') }]}>
+            Известията могат да бъдат повлияни от системните настройки на устройството ви. 
+            Проверете системните настройки, ако имате проблеми с известията.
           </Text>
         </View>
       </ScrollView>
@@ -420,7 +569,6 @@ const styles = StyleSheet.create({
   infoContainer: {
     flexDirection: 'row',
     padding: SPACING.m,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
     borderRadius: BORDER_RADIUS.m,
     marginBottom: SPACING.l,
   },

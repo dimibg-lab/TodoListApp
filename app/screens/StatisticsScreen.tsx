@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,9 @@ import {
   TouchableOpacity, 
   Dimensions, 
   ActivityIndicator,
-  SafeAreaView
+  SafeAreaView,
+  Animated,
+  Easing
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../utils/theme';
@@ -33,6 +35,11 @@ const StatisticsScreen = () => {
   const [chartType, setChartType] = useState<ChartType>('line');
   const [loading, setLoading] = useState<boolean>(false);
   
+  // Анимации
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const chartAnimValue = useRef(new Animated.Value(0)).current;
+  
   // Данни за различните графики
   const [completedVsTotal, setCompletedVsTotal] = useState<number[]>([0, 0]);
   const [completionByPeriod, setCompletionByPeriod] = useState<{ labels: string[], data: number[] }>({ 
@@ -42,15 +49,64 @@ const StatisticsScreen = () => {
   const [tasksByPriority, setTasksByPriority] = useState<{ name: string, count: number, color: string }[]>([]);
   const [activityHeatmap, setActivityHeatmap] = useState<{ date: string, count: number }[]>([]);
   
+  // Кеш за данните по периоди
+  const cachedData = useRef<{
+    [key in PeriodType]: {
+      completionByPeriod: { labels: string[], data: number[] },
+      activityHeatmap: { date: string, count: number }[]
+    }
+  }>({
+    day: { completionByPeriod: { labels: [], data: [] }, activityHeatmap: [] },
+    week: { completionByPeriod: { labels: [], data: [] }, activityHeatmap: [] },
+    month: { completionByPeriod: { labels: [], data: [] }, activityHeatmap: [] }
+  }).current;
+  
+  // Стартиране на входящите анимации
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+  
+  // Анимация при промяна на графика
+  useEffect(() => {
+    Animated.timing(chartAnimValue, {
+      toValue: 1,
+      duration: 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      chartAnimValue.setValue(0);
+    });
+  }, [chartType, period]);
+  
   // Изчисляване на статистиките
   useEffect(() => {
     setLoading(true);
     
-    // Асинхронно изчисляване на статистики (симулирано забавяне)
-    setTimeout(() => {
-      calculateStatistics();
+    // Проверка дали имаме кеширани данни
+    if (cachedData[period].completionByPeriod.labels.length > 0) {
+      setCompletionByPeriod(cachedData[period].completionByPeriod);
+      setActivityHeatmap(cachedData[period].activityHeatmap);
+      calculateCompletedVsTotal();
+      calculateTasksByPriority();
       setLoading(false);
-    }, 500);
+    } else {
+      // Асинхронно изчисляване на статистики
+      setTimeout(() => {
+        calculateStatistics();
+        setLoading(false);
+      }, 300);
+    }
   }, [todos, period]);
   
   // Изчисляване на всички статистики
@@ -145,412 +201,548 @@ const StatisticsScreen = () => {
       }
     }
     
-    setCompletionByPeriod({ labels, data });
+    const result = { labels, data };
+    setCompletionByPeriod(result);
+    
+    // Запазване в кеша
+    cachedData[period].completionByPeriod = result;
   };
   
-  // Задачи по приоритет
+  // Разпределение на задачите по приоритет
   const calculateTasksByPriority = () => {
-    const high = todos.filter(todo => todo.priority === 'high').length;
-    const medium = todos.filter(todo => todo.priority === 'medium').length;
-    const low = todos.filter(todo => todo.priority === 'low').length;
+    const highPriority = todos.filter(todo => todo.priority === 'high').length;
+    const mediumPriority = todos.filter(todo => todo.priority === 'medium').length;
+    const lowPriority = todos.filter(todo => todo.priority === 'low').length;
     
     setTasksByPriority([
-      { name: 'Висок', count: high, color: getColor('error') },
-      { name: 'Среден', count: medium, color: getColor('warning') },
-      { name: 'Нисък', count: low, color: getColor('success') }
+      { name: 'Висок', count: highPriority, color: getColor('priorityHigh') },
+      { name: 'Среден', count: mediumPriority, color: getColor('priorityMedium') },
+      { name: 'Нисък', count: lowPriority, color: getColor('priorityLow') },
     ]);
   };
   
-  // Активност по дни (heatmap)
+  // Данни за топлинната карта на активността
   const calculateActivityHeatmap = () => {
-    const activityData: { date: string, count: number }[] = [];
-    const today = new Date();
+    const now = new Date();
+    const startDate = new Date();
     
-    // За последните 3 месеца
-    for (let i = 90; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      const dateStr = date.toISOString().split('T')[0];
-      
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
-      
-      // Брой задачи, променени на този ден
-      const count = todos.filter(todo => {
-        const updated = new Date(todo.updatedAt);
-        return updated >= dayStart && updated <= dayEnd;
-      }).length;
-      
-      if (count > 0) {
-        activityData.push({ date: dateStr, count });
-      }
+    if (period === 'day') {
+      // Последните 30 дни
+      startDate.setDate(now.getDate() - 30);
+    } else if (period === 'week') {
+      // Последните 90 дни
+      startDate.setDate(now.getDate() - 90);
+    } else {
+      // Последната година
+      startDate.setFullYear(now.getFullYear() - 1);
     }
     
-    setActivityHeatmap(activityData);
-  };
-  
-  // Изчисляване на процента на завършените задачи
-  const calculateCompletionPercentage = (): number => {
-    if (todos.length === 0) return 0;
-    const completed = todos.filter(todo => todo.completed).length;
-    return Math.round((completed / todos.length) * 100);
-  };
-  
-  // Най-продуктивен ден от седмицата
-  const getMostProductiveDay = (): string => {
-    if (todos.length === 0) return 'Няма данни';
-    
-    const daysCount = [0, 0, 0, 0, 0, 0, 0]; // Нед, Пон, Вт, ...
+    const result: { date: string, count: number }[] = [];
     
     todos.forEach(todo => {
       if (todo.completed && todo.updatedAt) {
-        const day = new Date(todo.updatedAt).getDay();
-        daysCount[day]++;
+        const completedDate = new Date(todo.updatedAt);
+        
+        if (completedDate >= startDate && completedDate <= now) {
+          const dateStr = completedDate.toISOString().split('T')[0];
+          
+          const existingEntry = result.find(entry => entry.date === dateStr);
+          if (existingEntry) {
+            existingEntry.count++;
+          } else {
+            result.push({ date: dateStr, count: 1 });
+          }
+        }
       }
     });
     
-    const maxDay = daysCount.indexOf(Math.max(...daysCount));
-    const days = ['Неделя', 'Понеделник', 'Вторник', 'Сряда', 'Четвъртък', 'Петък', 'Събота'];
+    setActivityHeatmap(result);
     
-    return days[maxDay];
+    // Запазване в кеша
+    cachedData[period].activityHeatmap = result;
   };
   
-  // Общо време за завършване на задачи
+  // Изчисляване на процента завършени задачи
+  const calculateCompletionPercentage = (): number => {
+    if (todos.length === 0) return 0;
+    // Използване на Math.min за предотвратяване на стойности над 100%
+    return Math.min(100, Math.round((completedVsTotal[0] / todos.length) * 100));
+  };
+  
+  // Най-продуктивен ден
+  const getMostProductiveDay = (): string => {
+    if (completionByPeriod.data.length === 0) return 'Няма данни';
+    
+    const maxIndex = completionByPeriod.data.indexOf(Math.max(...completionByPeriod.data));
+    if (maxIndex === -1 || completionByPeriod.data[maxIndex] === 0) return 'Няма данни';
+    
+    return completionByPeriod.labels[maxIndex];
+  };
+  
+  // Средно време за изпълнение
   const getAverageCompletionTime = (): string => {
-    const completedTasks = todos.filter(todo => 
+    const completedTodos = todos.filter(todo => 
       todo.completed && todo.createdAt && todo.updatedAt
     );
     
-    if (completedTasks.length === 0) return 'Няма данни';
+    if (completedTodos.length === 0) return 'Няма данни';
     
-    let totalHours = 0;
+    const totalTimeMs = completedTodos.reduce((sum, todo) => {
+      const createdDate = new Date(todo.createdAt);
+      const completedDate = new Date(todo.updatedAt);
+      return sum + (completedDate.getTime() - createdDate.getTime());
+    }, 0);
     
-    completedTasks.forEach(todo => {
-      const created = new Date(todo.createdAt).getTime();
-      const completed = new Date(todo.updatedAt).getTime();
-      const hours = (completed - created) / (1000 * 60 * 60);
-      totalHours += hours;
-    });
+    const avgTimeMs = totalTimeMs / completedTodos.length;
+    const avgDays = Math.floor(avgTimeMs / (1000 * 60 * 60 * 24));
     
-    const avgHours = totalHours / completedTasks.length;
-    
-    if (avgHours < 24) {
-      return `${Math.round(avgHours)} часа`;
+    if (avgDays > 0) {
+      return `${avgDays} ${avgDays === 1 ? 'ден' : 'дни'}`;
     } else {
-      const days = Math.round(avgHours / 24);
-      return `${days} дни`;
+      const avgHours = Math.floor(avgTimeMs / (1000 * 60 * 60));
+      if (avgHours > 0) {
+        return `${avgHours} ${avgHours === 1 ? 'час' : 'часа'}`;
+      } else {
+        const avgMinutes = Math.floor(avgTimeMs / (1000 * 60));
+        return `${avgMinutes} ${avgMinutes === 1 ? 'минута' : 'минути'}`;
+      }
     }
   };
   
-  // Рендериране на различни типове графики
+  // Общи настройки за графиките
+  const chartConfig = useMemo(() => ({
+    backgroundGradientFrom: getColor('background'),
+    backgroundGradientTo: getColor('background'),
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(${hexToRgb(getColor('primary'))}, ${opacity})`,
+    labelColor: (opacity = 1) => getColor('text'),
+    style: {
+      borderRadius: 16,
+    },
+    propsForDots: {
+      r: '6',
+      strokeWidth: '2',
+      stroke: getColor('primary'),
+    },
+  }), [getColor]);
+  
+  // Помощна функция за конвертиране на хекс цвят към RGB
+  const hexToRgb = (hex: string): string => {
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    const formattedHex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+    
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(formattedHex);
+    if (!result) return '0, 0, 0';
+    
+    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
+  };
+  
+  // Рендериране на графиките
   const renderChart = () => {
-    const chartConfig = {
-      backgroundGradientFrom: getColor('background'),
-      backgroundGradientTo: getColor('background'),
-      color: (opacity = 1) => `rgba(${theme === 'dark' ? '255, 255, 255' : '0, 0, 0'}, ${opacity})`,
-      strokeWidth: 2,
-      barPercentage: 0.5,
-      useShadowColorFromDataset: false
+    const chartStyle = {
+      marginVertical: 8,
+      borderRadius: 16,
+      padding: 10,
+      backgroundColor: getColor('surface'),
+      shadowColor: getColor('text'),
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
     };
     
-    if (loading) {
+    const chartWidth = width - 40;
+    const chartHeight = 220;
+    
+    // Проверка за празни данни
+    const hasData = completionByPeriod.data.some(value => value > 0) || 
+                   tasksByPriority.some(item => item.count > 0) ||
+                   activityHeatmap.length > 0;
+    
+    if (!hasData) {
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={getColor('primary')} />
-          <Text style={[styles.loadingText, { color: getColor('text') }]}>
-            Изчисляване на статистики...
+        <Animated.View style={[chartStyle, { opacity: fadeAnim, justifyContent: 'center', alignItems: 'center', height: chartHeight }]}>
+          <MaterialIcons 
+            name="insert-chart" 
+            size={48} 
+            color={getColor('textLight')} 
+          />
+          <Text style={[styles.chartTitle, { color: getColor('text'), marginTop: 12 }]}>
+            Няма достатъчно данни за показване на графика
           </Text>
-        </View>
+        </Animated.View>
       );
     }
     
-    switch (chartType) {
-      case 'line':
+    // Анимация за графиките
+    const translateY = chartAnimValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [10, 0]
+    });
+    
+    const opacity = chartAnimValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1]
+    });
+    
+    // Подготовка на данните - защита от невалидни стойности
+    const safeData = completionByPeriod.data.map(value => 
+      isFinite(value) ? value : 0
+    );
+    
+    // Показване на различни видове графики
+    if (chartType === 'line') {
+      // Проверка дали има поне една ненулева стойност
+      const hasValidData = safeData.some(value => value > 0);
+      if (!hasValidData) {
         return (
+          <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }], justifyContent: 'center', alignItems: 'center', height: chartHeight }]}>
+            <MaterialIcons 
+              name="timeline" 
+              size={48} 
+              color={getColor('textLight')} 
+            />
+            <Text style={[styles.chartTitle, { color: getColor('text'), marginTop: 12 }]}>
+              Няма данни за линейната графика
+            </Text>
+          </Animated.View>
+        );
+      }
+      
+      return (
+        <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }] }]}>
+          <Text style={[styles.chartTitle, { color: getColor('text') }]}>
+            Завършени задачи във времето
+          </Text>
           <LineChart
             data={{
               labels: completionByPeriod.labels,
-              datasets: [
-                {
-                  data: completionByPeriod.data,
-                  color: (opacity = 1) => getColor('primary'),
-                  strokeWidth: 2
-                }
-              ]
+              datasets: [{ data: safeData }]
             }}
-            width={width - 32}
-            height={220}
+            width={chartWidth}
+            height={chartHeight}
             chartConfig={chartConfig}
             bezier
-            style={styles.chart}
+            style={{ borderRadius: 16 }}
           />
-        );
-        
-      case 'bar':
+        </Animated.View>
+      );
+    } else if (chartType === 'bar') {
+      // Проверка дали има поне една ненулева стойност
+      const hasValidData = safeData.some(value => value > 0);
+      if (!hasValidData) {
         return (
+          <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }], justifyContent: 'center', alignItems: 'center', height: chartHeight }]}>
+            <MaterialIcons 
+              name="bar-chart" 
+              size={48} 
+              color={getColor('textLight')} 
+            />
+            <Text style={[styles.chartTitle, { color: getColor('text'), marginTop: 12 }]}>
+              Няма данни за колонната графика
+            </Text>
+          </Animated.View>
+        );
+      }
+      
+      return (
+        <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }] }]}>
+          <Text style={[styles.chartTitle, { color: getColor('text') }]}>
+            Завършени задачи по период
+          </Text>
           <BarChart
             data={{
               labels: completionByPeriod.labels,
-              datasets: [
-                {
-                  data: completionByPeriod.data
-                }
-              ]
+              datasets: [{ data: safeData }]
             }}
-            width={width - 32}
-            height={220}
+            width={chartWidth}
+            height={chartHeight}
+            chartConfig={chartConfig}
+            style={{ borderRadius: 16 }}
             yAxisLabel=""
             yAxisSuffix=""
-            chartConfig={{
-              ...chartConfig,
-              color: (opacity = 1) => getColor('primary')
-            }}
-            style={styles.chart}
           />
-        );
-        
-      case 'pie':
+        </Animated.View>
+      );
+    } else if (chartType === 'pie') {
+      // Филтриране на нулеви стойности за кръговата диаграма
+      const validPriorityData = tasksByPriority.filter(item => item.count > 0);
+      
+      if (validPriorityData.length === 0) {
         return (
+          <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }], justifyContent: 'center', alignItems: 'center', height: chartHeight }]}>
+            <MaterialIcons 
+              name="pie-chart" 
+              size={48} 
+              color={getColor('textLight')} 
+            />
+            <Text style={[styles.chartTitle, { color: getColor('text'), marginTop: 12 }]}>
+              Няма данни за кръговата графика
+            </Text>
+          </Animated.View>
+        );
+      }
+      
+      const chartData = validPriorityData.map(item => ({
+        name: item.name,
+        count: isFinite(item.count) ? item.count : 0,
+        color: item.color,
+        legendFontColor: getColor('text'),
+        legendFontSize: 13
+      }));
+      
+      return (
+        <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }] }]}>
+          <Text style={[styles.chartTitle, { color: getColor('text') }]}>
+            Разпределение по приоритет
+          </Text>
           <PieChart
-            data={tasksByPriority.map(item => ({
-              name: item.name,
-              population: item.count,
-              color: item.color,
-              legendFontColor: getColor('text'),
-              legendFontSize: 12
-            }))}
-            width={width - 32}
-            height={220}
-            accessor="population"
+            data={chartData}
+            width={chartWidth}
+            height={chartHeight}
+            chartConfig={chartConfig}
+            accessor="count"
             backgroundColor="transparent"
             paddingLeft="15"
             absolute
           />
-        );
-        
-      case 'heatmap':
+        </Animated.View>
+      );
+    } else if (chartType === 'heatmap') {
+      if (activityHeatmap.length === 0) {
         return (
-          <ContributionGraph
-            values={activityHeatmap}
-            endDate={new Date()}
-            numDays={90}
-            width={width - 32}
-            height={220}
-            tooltipDataAttrs={() => ({})}
-            chartConfig={{
-              ...chartConfig,
-              color: (opacity = 1) => getColor('primary')
-            }}
-            style={styles.chart}
-          />
+          <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }], justifyContent: 'center', alignItems: 'center', height: chartHeight }]}>
+            <MaterialIcons 
+              name="grid-on" 
+              size={48} 
+              color={getColor('textLight')} 
+            />
+            <Text style={[styles.chartTitle, { color: getColor('text'), marginTop: 12 }]}>
+              Няма данни за топлинната карта
+            </Text>
+          </Animated.View>
         );
-        
-      default:
-        return null;
+      }
+      
+      // Филтриране на невалидни стойности за топлинната карта
+      const safeHeatmapData = activityHeatmap
+        .filter(item => item.date && isFinite(item.count))
+        .map(item => ({
+          date: item.date,
+          count: Math.max(0, item.count) // Предотвратяване на отрицателни стойности
+        }));
+      
+      return (
+        <Animated.View style={[chartStyle, { opacity, transform: [{ translateY }] }]}>
+          <Text style={[styles.chartTitle, { color: getColor('text') }]}>
+            Активност по дни
+          </Text>
+          <ContributionGraph
+            values={safeHeatmapData}
+            endDate={new Date()}
+            numDays={period === 'day' ? 30 : period === 'week' ? 90 : 365}
+            width={chartWidth}
+            height={chartHeight}
+            chartConfig={chartConfig}
+            style={{ borderRadius: 16 }}
+            tooltipDataAttrs={() => ({})}
+          />
+        </Animated.View>
+      );
     }
+    
+    return null;
   };
   
-  // Локална променлива за текущата тема, за да се използва в графиките
-  const theme = getColor('background') === '#FFFFFF' ? 'light' : 'dark';
+  // Рендериране на секция със сумарна статистика
+  const renderSummary = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.summaryContainer, 
+          { 
+            backgroundColor: getColor('surface'),
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+            shadowColor: getColor('text')
+          }
+        ]}
+      >
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: getColor('primary') }]}>
+            {calculateCompletionPercentage()}%
+          </Text>
+          <Text style={[styles.summaryLabel, { color: getColor('textLight') }]}>
+            Завършени
+          </Text>
+        </View>
+        
+        <View style={styles.summaryDivider} />
+        
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: getColor('primary') }]}>
+            {getMostProductiveDay()}
+          </Text>
+          <Text style={[styles.summaryLabel, { color: getColor('textLight') }]}>
+            Най-продуктивен ден
+          </Text>
+        </View>
+        
+        <View style={styles.summaryDivider} />
+        
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: getColor('primary') }]}>
+            {getAverageCompletionTime()}
+          </Text>
+          <Text style={[styles.summaryLabel, { color: getColor('textLight') }]}>
+            Средно време
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  };
+  
+  // Рендериране на бутоните за превключване на периода
+  const renderPeriodButtons = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.buttonsContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }] 
+          }
+        ]}
+      >
+        <Text style={[styles.filterTitle, { color: getColor('text') }]}>Период:</Text>
+        <View style={styles.periodButtons}>
+          {(['day', 'week', 'month'] as PeriodType[]).map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[
+                styles.periodButton,
+                period === p && { 
+                  backgroundColor: getColor('primary'),
+                  shadowColor: getColor('primary'),
+                  shadowOpacity: 0.3,
+                  shadowRadius: 5,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 3
+                }
+              ]}
+              onPress={() => setPeriod(p)}
+            >
+              <Text
+                style={[
+                  styles.periodButtonText,
+                  { color: period === p ? '#FFFFFF' : getColor('text') }
+                ]}
+              >
+                {p === 'day' ? 'Ден' : p === 'week' ? 'Седмица' : 'Месец'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Animated.View>
+    );
+  };
+  
+  // Рендериране на бутоните за превключване на вида графика
+  const renderChartTypeButtons = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.chartTypeContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }] 
+          }
+        ]}
+      >
+        <Text style={[styles.filterTitle, { color: getColor('text') }]}>Тип графика:</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chartTypeButtons}
+        >
+          {([
+            { type: 'line', icon: 'show-chart', label: 'Линейна' },
+            { type: 'bar', icon: 'bar-chart', label: 'Колонна' },
+            { type: 'pie', icon: 'pie-chart', label: 'Кръгова' },
+            { type: 'heatmap', icon: 'grid-on', label: 'Топлинна' }
+          ] as { type: ChartType, icon: string, label: string }[]).map((item) => (
+            <TouchableOpacity
+              key={item.type}
+              style={[
+                styles.chartTypeButton,
+                chartType === item.type && { 
+                  backgroundColor: getColor('primary'),
+                  shadowColor: getColor('primary'),
+                  shadowOpacity: 0.3,
+                  shadowRadius: 5,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 3
+                }
+              ]}
+              onPress={() => setChartType(item.type)}
+            >
+              <MaterialIcons 
+                name={item.icon as any} 
+                size={18} 
+                color={chartType === item.type ? '#FFFFFF' : getColor('primary')} 
+              />
+              <Text
+                style={[
+                  styles.chartTypeButtonText,
+                  { color: chartType === item.type ? '#FFFFFF' : getColor('text') }
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </Animated.View>
+    );
+  };
   
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: getColor('background') }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: getColor('text') }]}>
-            Статистика и анализи
-          </Text>
-        </View>
+        {/* Заглавие */}
+        <Animated.Text 
+          style={[
+            styles.title, 
+            { 
+              color: getColor('text'),
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          Статистика и анализи
+        </Animated.Text>
         
-        <View style={[styles.statsCard, { backgroundColor: getColor('background') }]}>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: getColor('primary') }]}>
-                {calculateCompletionPercentage()}%
-              </Text>
-              <Text style={[styles.statLabel, { color: getColor('textLight') }]}>
-                завършени
-              </Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: getColor('primary') }]}>
-                {getMostProductiveDay()}
-              </Text>
-              <Text style={[styles.statLabel, { color: getColor('textLight') }]}>
-                най-продуктивен ден
-              </Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: getColor('primary') }]}>
-                {getAverageCompletionTime()}
-              </Text>
-              <Text style={[styles.statLabel, { color: getColor('textLight') }]}>
-                средно време
-              </Text>
-            </View>
-          </View>
-        </View>
+        {/* Обобщена статистика */}
+        {renderSummary()}
         
-        <View style={styles.chartControlsContainer}>
-          <View style={styles.periodSelector}>
-            <Text style={[styles.sectionTitle, { color: getColor('text') }]}>
-              Период:
+        {/* Филтри за период */}
+        {renderPeriodButtons()}
+        
+        {/* Избор на тип графика */}
+        {renderChartTypeButtons()}
+        
+        {/* Визуализация на данните */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={getColor('primary')} />
+            <Text style={[styles.loadingText, { color: getColor('textLight') }]}>
+              Изчисляване на статистики...
             </Text>
-            <View style={styles.controls}>
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  period === 'day' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setPeriod('day')}
-              >
-                <Text 
-                  style={[
-                    styles.controlButtonText, 
-                    { color: period === 'day' ? '#FFFFFF' : getColor('text') }
-                  ]}
-                >
-                  Ден
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  period === 'week' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setPeriod('week')}
-              >
-                <Text 
-                  style={[
-                    styles.controlButtonText, 
-                    { color: period === 'week' ? '#FFFFFF' : getColor('text') }
-                  ]}
-                >
-                  Седмица
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  period === 'month' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setPeriod('month')}
-              >
-                <Text 
-                  style={[
-                    styles.controlButtonText, 
-                    { color: period === 'month' ? '#FFFFFF' : getColor('text') }
-                  ]}
-                >
-                  Месец
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
-          
-          <View style={styles.chartSelector}>
-            <Text style={[styles.sectionTitle, { color: getColor('text') }]}>
-              Тип графика:
-            </Text>
-            <View style={styles.controls}>
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  chartType === 'line' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setChartType('line')}
-              >
-                <MaterialIcons 
-                  name="show-chart" 
-                  size={16} 
-                  color={chartType === 'line' ? '#FFFFFF' : getColor('text')} 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  chartType === 'bar' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setChartType('bar')}
-              >
-                <MaterialIcons 
-                  name="bar-chart" 
-                  size={16} 
-                  color={chartType === 'bar' ? '#FFFFFF' : getColor('text')} 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  chartType === 'pie' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setChartType('pie')}
-              >
-                <MaterialIcons 
-                  name="pie-chart" 
-                  size={16} 
-                  color={chartType === 'pie' ? '#FFFFFF' : getColor('text')} 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  chartType === 'heatmap' && { backgroundColor: getColor('primary') }
-                ]}
-                onPress={() => setChartType('heatmap')}
-              >
-                <MaterialIcons 
-                  name="grid-on" 
-                  size={16} 
-                  color={chartType === 'heatmap' ? '#FFFFFF' : getColor('text')} 
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-        
-        <View style={[styles.chartContainer, { backgroundColor: getColor('background') }]}>
-          {todos.length > 0 ? (
-            renderChart()
-          ) : (
-            <View style={styles.emptyState}>
-              <MaterialIcons 
-                name="assessment" 
-                size={64} 
-                color={getColor('textLight')} 
-              />
-              <Text style={[styles.emptyStateText, { color: getColor('textLight') }]}>
-                Няма достатъчно данни за генериране на статистика
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.infoContainer}>
-          <Text style={[styles.infoTitle, { color: getColor('text') }]}>
-            Полезна информация
-          </Text>
-          <Text style={[styles.infoText, { color: getColor('textLight') }]}>
-            Използвайте статистиката, за да проследите своя напредък и да 
-            идентифицирате модели в управлението на вашите задачи.
-          </Text>
-          <Text style={[styles.infoText, { color: getColor('textLight') }]}>
-            Най-продуктивният ви ден е това, което статистиката показва, че сте 
-            завършили най-много задачи. Използвайте тази информация, за да 
-            планирате по-ефективно седмицата си.
-          </Text>
-        </View>
+        ) : (
+          renderChart()
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -561,122 +753,104 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
-  },
-  header: {
-    padding: 16,
+    padding: 20,
+    paddingTop: 40, // По-голям padding отгоре
+    paddingBottom: 30,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as any,
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  statsCard: {
-    margin: 16,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+  summaryContainer: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 20,
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  statsRow: {
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryDivider: {
+    width: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginHorizontal: 10,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold' as any,
+    marginBottom: 5,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  buttonsContainer: {
+    marginBottom: 20,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: '500' as any,
+    marginBottom: 10,
+  },
+  periodButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  statItem: {
-    alignItems: 'center',
+  periodButton: {
     flex: 1,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  chartControlsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  periodSelector: {
-    marginBottom: 12,
-  },
-  chartSelector: {
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  controls: {
-    flexDirection: 'row',
-  },
-  controlButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+    borderRadius: 8,
+    marginHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  controlButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
+  periodButtonText: {
+    fontSize: 14,
+    fontWeight: '500' as any,
   },
-  chartContainer: {
+  chartTypeContainer: {
+    marginBottom: 20,
+  },
+  chartTypeButtons: {
+    paddingVertical: 5,
+  },
+  chartTypeButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  chart: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  chartTypeButtonText: {
+    fontSize: 14,
+    fontWeight: '500' as any,
+    marginLeft: 5,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '500' as any,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
     height: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 10,
     fontSize: 14,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 220,
-    paddingHorizontal: 32,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  infoContainer: {
-    margin: 16,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3F51B5',
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 8,
-    lineHeight: 20,
   },
 });
 

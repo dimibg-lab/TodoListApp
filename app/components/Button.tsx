@@ -7,7 +7,8 @@ import {
   TouchableOpacityProps,
   StyleProp,
   ViewStyle,
-  TextStyle
+  TextStyle,
+  View
 } from 'react-native';
 import { useAppTheme } from '../utils/theme';
 import { BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, SPACING } from '../constants/theme';
@@ -15,7 +16,7 @@ import { BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, SPACING } from '../constants/the
 interface ButtonProps extends TouchableOpacityProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'text';
+  variant?: 'primary' | 'secondary' | 'outline' | 'text' | 'error';
   size?: 'small' | 'medium' | 'large';
   loading?: boolean;
   disabled?: boolean;
@@ -23,6 +24,7 @@ interface ButtonProps extends TouchableOpacityProps {
   textStyle?: StyleProp<TextStyle>;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  iconPlacement?: 'left' | 'top';
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -36,6 +38,7 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   leftIcon,
   rightIcon,
+  iconPlacement = 'left',
   ...rest
 }) => {
   const { getColor, getShadow } = useAppTheme();
@@ -46,12 +49,29 @@ export const Button: React.FC<ButtonProps> = ({
       case 'primary':
         return {
           backgroundColor: getColor('primary'),
-          ...getShadow('small'),
+          elevation: 4,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
         };
       case 'secondary':
         return {
           backgroundColor: getColor('accent'),
-          ...getShadow('small'),
+          elevation: 4,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+        };
+      case 'error':
+        return {
+          backgroundColor: getColor('error'),
+          elevation: 4,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
         };
       case 'outline':
         return {
@@ -77,6 +97,7 @@ export const Button: React.FC<ButtonProps> = ({
     switch (variant) {
       case 'primary':
       case 'secondary':
+      case 'error':
         return {
           ...baseTextStyle,
           color: '#FFFFFF',
@@ -99,33 +120,33 @@ export const Button: React.FC<ButtonProps> = ({
         return {
           container: {
             paddingVertical: SPACING.xs,
-            paddingHorizontal: SPACING.m,
-            borderRadius: BORDER_RADIUS.s,
+            paddingHorizontal: SPACING.s,
+            borderRadius: BORDER_RADIUS.l,
           },
           text: {
-            fontSize: FONT_SIZE.s,
+            fontSize: FONT_SIZE.xs,
           },
         };
       case 'large':
         return {
           container: {
             paddingVertical: SPACING.m,
-            paddingHorizontal: SPACING.xl,
+            paddingHorizontal: SPACING.l,
             borderRadius: BORDER_RADIUS.l,
           },
           text: {
-            fontSize: FONT_SIZE.l,
+            fontSize: FONT_SIZE.m,
           },
         };
       default: // medium
         return {
           container: {
             paddingVertical: SPACING.s,
-            paddingHorizontal: SPACING.l,
-            borderRadius: BORDER_RADIUS.m,
+            paddingHorizontal: SPACING.m,
+            borderRadius: BORDER_RADIUS.l,
           },
           text: {
-            fontSize: FONT_SIZE.m,
+            fontSize: FONT_SIZE.s,
           },
         };
     }
@@ -143,12 +164,9 @@ export const Button: React.FC<ButtonProps> = ({
     textStyle
   ];
 
-  // Добавяме маргини, ако има икони
-  if (leftIcon) {
-    textStylesArray.push({ marginLeft: SPACING.s } as TextStyle);
-  }
-  if (rightIcon) {
-    textStylesArray.push({ marginRight: SPACING.s } as TextStyle);
+  // Добавяме маргини ако е в колонен режим
+  if (iconPlacement === 'top' && leftIcon) {
+    textStylesArray.push({ marginTop: 4 } as TextStyle);
   }
 
   return (
@@ -159,6 +177,7 @@ export const Button: React.FC<ButtonProps> = ({
         styles.button,
         getVariantStyles(),
         sizeStyles.container,
+        iconPlacement === 'top' && styles.buttonColumn,
         isDisabled && styles.disabled,
         isDisabled && { backgroundColor: getColor('disabled') },
         style,
@@ -170,11 +189,14 @@ export const Button: React.FC<ButtonProps> = ({
         <ActivityIndicator size="small" color="#FFFFFF" />
       ) : (
         <>
-          {leftIcon && <>{leftIcon}</>}
+          {leftIcon && iconPlacement === 'left' && <View style={styles.iconLeft}>{leftIcon}</View>}
+          {leftIcon && iconPlacement === 'top' && <View>{leftIcon}</View>}
+          
           <Text style={textStylesArray}>
             {title}
           </Text>
-          {rightIcon && <>{rightIcon}</>}
+          
+          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
         </>
       )}
     </TouchableOpacity>
@@ -187,6 +209,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonColumn: {
+    flexDirection: 'column',
+    paddingHorizontal: SPACING.s,
+  },
   buttonText: {
     textAlign: 'center',
   },
@@ -195,5 +221,11 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#FFFFFF',
+  },
+  iconLeft: {
+    marginRight: SPACING.xs,
+  },
+  iconRight: {
+    marginLeft: SPACING.xs,
   },
 }); 

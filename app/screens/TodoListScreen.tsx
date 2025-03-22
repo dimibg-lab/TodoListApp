@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ActivityIndicator,
+  GestureResponderEvent,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +19,9 @@ import { useAppTheme } from '../utils/theme';
 import { BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, SPACING } from '../constants/theme';
 import { TodoListScreenProps } from '../navigation/types';
 import { Todo, TodoFilter, TodoSortOption } from '../types';
-import { CommonActions } from '@react-navigation/native';
+import { CommonActions, useFocusEffect } from '@react-navigation/native';
+import { FloatingButton } from '../components/FloatingButton';
+import Tooltip from '../components/Tooltip';
 
 const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) => {
   const { listId, listName } = route.params;
@@ -30,12 +34,51 @@ const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) =>
     setSortBy,
     sortDirection,
     setSortDirection,
+    reloadDataFromStorage
   } = useTodo();
   const { getColor } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [tooltipText, setTooltipText] = useState('');
+
+  // Логване при монтиране на компонента
+  useEffect(() => {
+    console.log('TodoListScreen: МОНТИРАН ЗА СПИСЪК:', listId, listName);
+    console.log('TodoListScreen: ПОЛУЧЕНИ ЗАДАЧИ ОТ КОНТЕКСТА:', todos.length);
+  }, []);
+
+  // Добавяме фокус слушател
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Опресняваме данните автоматично при връщане към екрана
+      console.log('TodoListScreen: ФОКУС ПОЛУЧЕН, ОБНОВЯВАМЕ ДАННИ');
+      onRefresh();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  // Добавяме useFocusEffect, за да презареждаме данните при връщане към екрана
+  useFocusEffect(
+    useCallback(() => {
+      console.log('TodoListScreen: ЕКРАНЪТ ПОЛУЧИ ФОКУС, ПРЕЗАРЕЖДАНЕ НА ДАННИ');
+      // Ще използваме функция за презареждане на данни от контекста
+      reloadDataFromStorage().then(() => {
+        console.log('TodoListScreen: ДАННИТЕ СА ПРЕЗАРЕДЕНИ УСПЕШНО');
+      }).catch(error => {
+        console.error('TodoListScreen: ГРЕШКА ПРИ ПРЕЗАРЕЖДАНЕ НА ДАННИ:', error);
+      });
+      
+      return () => {
+        console.log('TodoListScreen: ЕКРАНЪТ ЗАГУБИ ФОКУС');
+      };
+    }, [reloadDataFromStorage])
+  );
 
   // Филтрираме задачите, за да покажем само тези от текущия списък
   const listTodos = todos.filter(todo => todo.listId === listId);
+  console.log('TodoListScreen: ЗАДАЧИ В ТЕКУЩИЯ СПИСЪК:', listTodos.length);
 
   // Филтрираме според активния филтър
   const getFilteredTodos = () => {
@@ -49,7 +92,10 @@ const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) =>
 
   // Сортираме задачите
   const getSortedTodos = () => {
-    return [...getFilteredTodos()].sort((a, b) => {
+    const filtered = getFilteredTodos();
+    console.log('TodoListScreen: ФИЛТРИРАНИ ЗАДАЧИ:', filtered.length);
+    
+    const sorted = [...filtered].sort((a, b) => {
       if (sortBy === 'dueDate') {
         if (!a.dueDate) return sortDirection === 'asc' ? 1 : -1;
         if (!b.dueDate) return sortDirection === 'asc' ? -1 : 1;
@@ -67,6 +113,14 @@ const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) =>
           : b.title.localeCompare(a.title);
       }
     });
+    
+    console.log('TodoListScreen: СОРТИРАНИ ЗАДАЧИ:', sorted.length);
+    
+    if (sorted.length > 0) {
+      console.log('TodoListScreen: ПРИМЕР ЗА ПЪРВА ЗАДАЧА:', JSON.stringify(sorted[0]));
+    }
+    
+    return sorted;
   };
 
   // Обработка при клик върху задача
@@ -152,10 +206,38 @@ const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) =>
   // Обновяване на данните
   const onRefresh = async () => {
     setRefreshing(true);
-    // Тук може да добавите логика за опресняване на данните
+    console.log('TodoListScreen: ЗАПОЧНА ОБНОВЯВАНЕ');
+    
+    try {
+      // Принудително презареждаме данните от AsyncStorage
+      const count = await reloadDataFromStorage();
+      console.log(`TodoListScreen: ПРЕЗАРЕДЕНИ ${count} ЗАДАЧИ ОТ ASYNCSTORAGE`);
+    } catch (error) {
+      console.error('TodoListScreen: ГРЕШКА ПРИ ПРЕЗАРЕЖДАНЕ НА ДАННИ:', error);
+    }
+    
+    // Изчакваме малко за по-добро потребителско преживяване
     setTimeout(() => {
+      // За да сме сигурни, че React ще презареди компонента с новите данни
+      setFilter(filter);
+      console.log('TodoListScreen: ОБНОВЯВАНЕТО ПРИКЛЮЧИ');
       setRefreshing(false);
-    }, 1000);
+    }, 500);
+  };
+
+  // Функция за показване на tooltip
+  const showTooltip = (text: string, event: GestureResponderEvent) => {
+    setTooltipPosition({
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY
+    });
+    setTooltipText(text);
+    setTooltipVisible(true);
+  };
+
+  // Функция за скриване на tooltip
+  const hideTooltip = () => {
+    setTooltipVisible(false);
   };
 
   // Рендериране на секцията с филтри и сортиране
@@ -359,18 +441,27 @@ const TodoListScreen: React.FC<TodoListScreenProps> = ({ route, navigation }) =>
 
       <View style={styles.bottomContainer}>
         <TouchableOpacity
-          style={[styles.searchButton, { backgroundColor: getColor('surface') }]}
+          style={[styles.actionButtonSmall, { backgroundColor: getColor('surface') }]}
           onPress={handleSearch}
         >
-          <MaterialIcons name="search" size={24} color={getColor('primary')} />
+          <MaterialIcons name="search" size={22} color={getColor('primary')} />
         </TouchableOpacity>
-        <Button
-          title="Нова задача"
+        
+        <FloatingButton 
+          icon="add" 
           onPress={handleAddTodo}
-          style={styles.addButton}
-          leftIcon={<MaterialIcons name="add" size={24} color="#FFFFFF" />}
+          onLongPress={(e: GestureResponderEvent) => showTooltip('Добавете нова задача', e)}
+          delayLongPress={500}
         />
       </View>
+
+      <Tooltip 
+        visible={tooltipVisible}
+        onClose={hideTooltip}
+        text={tooltipText}
+        position={tooltipPosition}
+        isAbove={true}
+      />
     </SafeAreaView>
   );
 };
@@ -407,6 +498,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
   },
   filtersContainer: {
     padding: SPACING.m,
@@ -477,6 +573,39 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
     elevation: 2,
+  },
+  actionButtonSmall: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.m,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.s,
+    paddingHorizontal: SPACING.m,
+    borderRadius: BORDER_RADIUS.l,
+    flex: 1,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: FONT_SIZE.s,
+    fontWeight: FONT_WEIGHT.medium as any,
+    marginLeft: SPACING.xs,
   },
   addButton: {
     flex: 1,

@@ -1,12 +1,12 @@
 // @ts-nocheck
-import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, lazy, Suspense } from 'react';
+import { NavigationContainer, NavigationContainerRef, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
 import { useAppTheme } from '../utils/theme';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar, View, ActivityIndicator } from 'react-native';
 
 // Типове за навигация
 import {
@@ -14,7 +14,9 @@ import {
   MainTabParamList,
   HomeStackParamList,
   TodoListsStackParamList,
-  SettingsStackParamList
+  SettingsStackParamList,
+  MoreStackParamList,
+  IdeasStackParamList
 } from './types';
 
 // Екрани за вграждане (импортирани с лейзи лоадинг за по-добра производителност)
@@ -23,36 +25,56 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 
 // Домашни екрани
 // @ts-ignore
-const HomeScreen = React.lazy(() => import('../screens/HomeScreen'));
+const HomeScreen = lazy(() => import('../screens/HomeScreen'));
 // @ts-ignore
-const TodoDetailsScreen = React.lazy(() => import('../screens/TodoDetailsScreen'));
+const TodoDetailsScreen = lazy(() => import('../screens/TodoDetailsScreen'));
 // @ts-ignore
-const AddEditTodoScreen = React.lazy(() => import('../screens/AddEditTodoScreen'));
+const AddEditTodoScreen = lazy(() => import('../screens/AddEditTodoScreen'));
 // @ts-ignore
-const SearchTodosScreen = React.lazy(() => import('../screens/SearchTodosScreen'));
+const SearchTodosScreen = lazy(() => import('../screens/SearchTodosScreen'));
 
 // Екрани за списъци със задачи
 // @ts-ignore
-const TodoListsScreen = React.lazy(() => import('../screens/TodoListsScreen'));
+const TodoListsScreen = lazy(() => import('../screens/TodoListsScreen'));
 // @ts-ignore
-const TodoListScreen = React.lazy(() => import('../screens/TodoListScreen'));
+const TodoListScreen = lazy(() => import('../screens/TodoListScreen'));
 // @ts-ignore
-const AddEditListScreen = React.lazy(() => import('../screens/AddEditListScreen'));
+const AddEditListScreen = lazy(() => import('../screens/AddEditListScreen'));
 
 // Екрани за настройки
 // @ts-ignore
-const SettingsScreen = React.lazy(() => import('../screens/SettingsScreen'));
+const SettingsScreen = lazy(() => import('../screens/SettingsScreen'));
 // @ts-ignore
-const ThemeSettingsScreen = React.lazy(() => import('../screens/ThemeSettingsScreen'));
+const ThemeSettingsScreen = lazy(() => import('../screens/ThemeSettingsScreen'));
 // @ts-ignore
-const NotificationSettingsScreen = React.lazy(() => import('../screens/NotificationSettingsScreen'));
+const NotificationSettingsScreen = lazy(() => import('../screens/NotificationSettingsScreen'));
 // @ts-ignore
-const AboutScreen = React.lazy(() => import('../screens/AboutScreen'));
+const AboutScreen = lazy(() => import('../screens/AboutScreen'));
 
 // @ts-ignore
-const CalendarScreen = React.lazy(() => import('../screens/CalendarScreen'));
+const CalendarScreen = lazy(() => import('../screens/CalendarScreen'));
 // @ts-ignore
-const StatisticsScreen = React.lazy(() => import('../screens/StatisticsScreen'));
+const StatisticsScreen = lazy(() => import('../screens/StatisticsScreen'));
+
+// Добавяне на импорт за LocationSettingsScreen
+// @ts-ignore
+const LocationSettingsScreen = lazy(() => import('../screens/LocationSettingsScreen'));
+
+// Импортиране на екрани за Още
+// @ts-ignore
+const MoreScreen = lazy(() => import('../screens/MoreScreen'));
+// @ts-ignore
+const IdeaListScreen = lazy(() => import('../screens/IdeaListScreen'));
+// @ts-ignore
+const IdeaDetailsScreen = lazy(() => import('../screens/IdeaDetailsScreen'));
+// @ts-ignore
+const AddEditIdeaScreen = lazy(() => import('../screens/AddEditIdeaScreen'));
+// @ts-ignore
+const WeatherScreen = lazy(() => import('../screens/WeatherScreen'));
+// @ts-ignore
+const QuotesScreen = lazy(() => import('../screens/QuotesScreen'));
+// @ts-ignore
+const NotificationSoundScreen = lazy(() => import('../screens/NotificationSoundScreen'));
 
 // Създаване на навигационните стакове
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -60,19 +82,11 @@ const MainTab = createBottomTabNavigator<MainTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const TodoListsStack = createNativeStackNavigator<TodoListsStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
+const MoreStack = createNativeStackNavigator<MoreStackParamList>();
+const IdeasStack = createNativeStackNavigator<IdeasStackParamList>();
 
 // Компонент за Fallback когато лейзи лоадинг се зарежда
-import { View, ActivityIndicator } from 'react-native';
-
-const LoadingFallback = () => {
-  const { getColor } = useAppTheme();
-  
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: getColor('background') }}>
-      <ActivityIndicator size="large" color={getColor('primary')} />
-    </View>
-  );
-};
+import LoadingFallback from '../components/LoadingFallback';
 
 // Навигация на домашния екран
 const HomeStackNavigator = () => {
@@ -92,33 +106,33 @@ const HomeStackNavigator = () => {
     >
       <HomeStack.Screen
         name="HomeScreen"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <HomeScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : HomeScreen
         }
         options={{ title: 'Моите задачи' }}
       />
       <HomeStack.Screen
         name="TodoDetails"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <TodoDetailsScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : TodoDetailsScreen
         }
         options={{ title: 'Детайли за задачата' }}
       />
       <HomeStack.Screen
         name="AddEditTodo"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: HomeStackParamList['AddEditTodo']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <AddEditTodoScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : AddEditTodoScreen
         }
         options={({ route }) => ({ 
@@ -127,11 +141,11 @@ const HomeStackNavigator = () => {
       />
       <HomeStack.Screen
         name="SearchTodos"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: HomeStackParamList['SearchTodos']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <SearchTodosScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : SearchTodosScreen
         }
         options={{ title: 'Търсене на задачи' }}
@@ -158,33 +172,33 @@ const TodoListsStackNavigator = () => {
     >
       <TodoListsStack.Screen
         name="TodoListsScreen"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: TodoListsStackParamList['TodoListsScreen']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <TodoListsScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : TodoListsScreen
         }
         options={{ title: 'Списъци' }}
       />
       <TodoListsStack.Screen
         name="TodoList"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: TodoListsStackParamList['TodoList']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <TodoListScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : TodoListScreen
         }
         options={({ route }) => ({ title: route.params.listName })}
       />
       <TodoListsStack.Screen
         name="AddEditList"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: TodoListsStackParamList['AddEditList']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <AddEditListScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : AddEditListScreen
         }
         options={({ route }) => ({ 
@@ -192,6 +206,155 @@ const TodoListsStackNavigator = () => {
         })}
       />
     </TodoListsStack.Navigator>
+  );
+};
+
+// Навигация за идеите
+const IdeasStackNavigator = () => {
+  const { getColor } = useAppTheme();
+  
+  return (
+    <IdeasStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: getColor('background'),
+        },
+        headerTintColor: getColor('text'),
+        contentStyle: {
+          backgroundColor: getColor('background'),
+        },
+      }}
+    >
+      <IdeasStack.Screen
+        name="IdeaListScreen"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <IdeaListScreen {...props} />
+            </Suspense>
+          ) : IdeaListScreen
+        }
+        options={{ title: 'Моите идеи' }}
+      />
+      <IdeasStack.Screen
+        name="IdeaDetails"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <IdeaDetailsScreen {...props} />
+            </Suspense>
+          ) : IdeaDetailsScreen
+        }
+        options={{ title: 'Детайли за идеята' }}
+      />
+      <IdeasStack.Screen
+        name="AddEditIdea"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <AddEditIdeaScreen {...props} />
+            </Suspense>
+          ) : AddEditIdeaScreen
+        }
+        options={({ route }) => ({ 
+          title: route.params?.ideaId ? 'Редактиране на идея' : 'Нова идея'
+        })}
+      />
+    </IdeasStack.Navigator>
+  );
+};
+
+// Навигация секция "Още"
+const MoreStackNavigator = () => {
+  const { getColor } = useAppTheme();
+  
+  return (
+    <MoreStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: getColor('background'),
+        },
+        headerTintColor: getColor('text'),
+        contentStyle: {
+          backgroundColor: getColor('background'),
+        },
+      }}
+    >
+      <MoreStack.Screen
+        name="MoreScreen"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <MoreScreen {...props} />
+            </Suspense>
+          ) : MoreScreen
+        }
+        options={{ title: 'Още функции' }}
+      />
+      <MoreStack.Screen
+        name="Ideas"
+        component={IdeasStackNavigator}
+        options={{ 
+          title: 'Моите идеи',
+          headerShown: false
+        }}
+      />
+      <MoreStack.Screen
+        name="Weather"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <WeatherScreen {...props} />
+            </Suspense>
+          ) : WeatherScreen
+        }
+        options={{ title: 'Прогноза за времето' }}
+      />
+      <MoreStack.Screen
+        name="Quotes"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <QuotesScreen {...props} />
+            </Suspense>
+          ) : QuotesScreen
+        }
+        options={{ title: 'Цитати и мотивация' }}
+      />
+      <MoreStack.Screen
+        name="Priorities"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <TodoListScreen {...props} />
+            </Suspense>
+          ) : TodoListScreen
+        }
+        options={{ title: 'Приоритети' }}
+      />
+      <MoreStack.Screen
+        name="Export"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <TodoListScreen {...props} />
+            </Suspense>
+          ) : TodoListScreen
+        }
+        options={{ title: 'Експорт на данни' }}
+      />
+      <MoreStack.Screen
+        name="Help"
+        component={Suspense ? 
+          (props) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <TodoListScreen {...props} />
+            </Suspense>
+          ) : TodoListScreen
+        }
+        options={{ title: 'Помощ и съвети' }}
+      />
+    </MoreStack.Navigator>
   );
 };
 
@@ -213,47 +376,69 @@ const SettingsStackNavigator = () => {
     >
       <SettingsStack.Screen
         name="SettingsScreen"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: SettingsStackParamList['SettingsScreen']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <SettingsScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : SettingsScreen
         }
         options={{ title: 'Настройки' }}
       />
       <SettingsStack.Screen
         name="ThemeSettings"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: SettingsStackParamList['ThemeSettings']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <ThemeSettingsScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : ThemeSettingsScreen
         }
         options={{ title: 'Настройки на темата' }}
       />
       <SettingsStack.Screen
         name="NotificationSettings"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: SettingsStackParamList['NotificationSettings']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <NotificationSettingsScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : NotificationSettingsScreen
         }
         options={{ title: 'Настройки на известията' }}
       />
       <SettingsStack.Screen
         name="About"
-        component={React.Suspense ? 
+        component={Suspense ? 
           (props: SettingsStackParamList['About']) => (
-            <React.Suspense fallback={<LoadingFallback />}>
+            <Suspense fallback={<LoadingFallback />}>
               <AboutScreen {...props} />
-            </React.Suspense>
+            </Suspense>
           ) : AboutScreen
         }
         options={{ title: 'За приложението' }}
+      />
+      <SettingsStack.Screen
+        name="LocationSettings"
+        component={Suspense ? 
+          (props: SettingsStackParamList['LocationSettings']) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <LocationSettingsScreen {...props} />
+            </Suspense>
+          ) : LocationSettingsScreen
+        }
+        options={{ title: 'Локационни напомняния' }}
+      />
+      <SettingsStack.Screen
+        name="NotificationSound"
+        component={Suspense ? 
+          (props: SettingsStackParamList['NotificationSound']) => (
+            <Suspense fallback={<LoadingFallback />}>
+              <NotificationSoundScreen {...props} />
+            </Suspense>
+          ) : NotificationSoundScreen
+        }
+        options={{ title: 'Избор на звук' }}
       />
     </SettingsStack.Navigator>
   );
@@ -322,6 +507,16 @@ const MainTabNavigator = () => {
           tabBarLabel: 'Настройки',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="settings" size={size} color={color} />
+          ),
+        }}
+      />
+      <MainTab.Screen
+        name="More"
+        component={MoreStackNavigator}
+        options={{
+          tabBarLabel: 'Още',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="more-horiz" size={size} color={color} />
           ),
         }}
       />

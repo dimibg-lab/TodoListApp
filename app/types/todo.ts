@@ -11,4 +11,11 @@ export interface TodoItem {
   listName?: string;
   tags?: string[];
   notes?: string;
+  location?: {
+    name: string;
+    latitude: number;
+    longitude: number;
+    radius: number; // радиус в метри
+    triggered: boolean; // дали уведомлението е било активирано
+  };
 } 

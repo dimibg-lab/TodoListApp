@@ -123,7 +123,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
         {/* Настройки на приложението */}
         <View style={styles.settingsSection}>
           <Text style={[styles.sectionTitle, { color: getColor('textLight') }]}>
-            ПРИЛОЖЕНИЕ
+            Настройки на приложението
           </Text>
           
           <View style={[styles.settingsGroup, { backgroundColor: getColor('surface') }]}>
@@ -134,7 +134,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
             >
               <View style={styles.settingLeft}>
                 <MaterialIcons
-                  name={theme === 'dark' ? 'dark-mode' : 'light-mode'}
+                  name="palette"
                   size={24}
                   color={getColor('primary')}
                   style={styles.settingIcon}
@@ -144,7 +144,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
                     Тема
                   </Text>
                   <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
-                    {theme === 'dark' ? 'Тъмна тема' : 'Светла тема'}
+                    {userSettings.theme === 'dark' ? 'Тъмна' : 'Светла'} тема
                   </Text>
                 </View>
               </View>
@@ -169,6 +169,30 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
                   </Text>
                   <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
                     Управление на известията
+                  </Text>
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={getColor('textLight')} />
+            </TouchableOpacity>
+            
+            {/* Локационни напомняния */}
+            <TouchableOpacity
+              style={[styles.settingItem, { borderBottomColor: getColor('border') }]}
+              onPress={() => navigation.navigate('LocationSettings')}
+            >
+              <View style={styles.settingLeft}>
+                <MaterialIcons
+                  name="location-on"
+                  size={24}
+                  color={getColor('primary')}
+                  style={styles.settingIcon}
+                />
+                <View>
+                  <Text style={[styles.settingTitle, { color: getColor('text') }]}>
+                    Локационни напомняния
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: getColor('textLight') }]}>
+                    Настройки за местоположение
                   </Text>
                 </View>
               </View>

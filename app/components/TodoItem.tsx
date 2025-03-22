@@ -1,16 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   TouchableOpacity, 
   StyleProp,
-  ViewStyle
+  ViewStyle,
+  Platform
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Todo, Priority } from '../types';
 import { useAppTheme } from '../utils/theme';
 import { BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, SPACING } from '../constants/theme';
+import { useTodo } from '../context/TodoContext';
+import Tooltip from './Tooltip';
 
 interface TodoItemProps {
   todo: Todo;
@@ -26,7 +29,9 @@ export const TodoItem: React.FC<TodoItemProps> = ({
   style
 }) => {
   const { getColor } = useAppTheme();
-
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  
   // Получаване на цвят за приоритета
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
@@ -45,36 +50,46 @@ export const TodoItem: React.FC<TodoItemProps> = ({
   const formatDueDate = (date?: Date) => {
     if (!date) return null;
     
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Проверка дали date е валидна дата
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      return 'Невалидна дата';
+    }
     
-    const isToday = date.getDate() === today.getDate() && 
-      date.getMonth() === today.getMonth() && 
-      date.getFullYear() === today.getFullYear();
+    try {
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
       
-    const isTomorrow = date.getDate() === tomorrow.getDate() && 
-      date.getMonth() === tomorrow.getMonth() && 
-      date.getFullYear() === tomorrow.getFullYear();
-    
-    // Време във формат HH:MM
-    const timeString = date.toLocaleTimeString('bg-BG', { 
-      hour: '2-digit', 
-      minute: '2-digit'
-    });
-    
-    if (isToday) {
-      return `Днес, ${timeString}`;
-    } else if (isTomorrow) {
-      return `Утре, ${timeString}`;
-    } else {
-      // Форматиране на дата във формат DD.MM.YYYY
-      const dateString = date.toLocaleDateString('bg-BG', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
+      const isToday = date.getDate() === today.getDate() && 
+        date.getMonth() === today.getMonth() && 
+        date.getFullYear() === today.getFullYear();
+        
+      const isTomorrow = date.getDate() === tomorrow.getDate() && 
+        date.getMonth() === tomorrow.getMonth() && 
+        date.getFullYear() === tomorrow.getFullYear();
+      
+      // Време във формат HH:MM
+      const timeString = date.toLocaleTimeString('bg-BG', { 
+        hour: '2-digit', 
+        minute: '2-digit'
       });
-      return `${dateString}, ${timeString}`;
+      
+      if (isToday) {
+        return `Днес, ${timeString}`;
+      } else if (isTomorrow) {
+        return `Утре, ${timeString}`;
+      } else {
+        // Форматиране на дата във формат DD.MM.YYYY
+        const dateString = date.toLocaleDateString('bg-BG', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+        return `${dateString}, ${timeString}`;
+      }
+    } catch (error) {
+      console.error('Грешка при форматиране на дата:', error);
+      return 'Грешка';
     }
   };
 
@@ -95,12 +110,56 @@ export const TodoItem: React.FC<TodoItemProps> = ({
     }
   };
 
+  // Променям функцията getPriorityInfo за да връща конкретни типове за icon и color
+  const getPriorityInfo = (priority: Priority) => {
+    switch (priority) {
+      case 'high':
+        return { 
+          color: 'priorityHigh' as const, 
+          icon: 'priority-high' as const 
+        };
+      case 'medium':
+        return { 
+          color: 'priorityMedium' as const, 
+          icon: 'trending-up' as const 
+        };
+      case 'low':
+        return { 
+          color: 'priorityLow' as const, 
+          icon: 'trending-down' as const 
+        };
+      default:
+        return { 
+          color: 'priorityLow' as const, 
+          icon: 'trending-down' as const 
+        };
+    }
+  };
+
+  // Показваме tooltip
+  const showTooltip = (event: any) => {
+    setTooltipPosition({
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY
+    });
+    setTooltipVisible(true);
+  };
+
+  // Скриваме tooltip
+  const hideTooltip = () => {
+    setTooltipVisible(false);
+  };
+
+  // Вземам информация за приоритета
+  const priorityInfo = getPriorityInfo(todo.priority);
+
   return (
     <TouchableOpacity
       style={[
         styles.container,
-        { 
+        {
           backgroundColor: getColor('surface'),
+          borderColor: getColor('border'),
           shadowColor: getColor('text'),
         },
         todo.completed && { 
@@ -115,6 +174,8 @@ export const TodoItem: React.FC<TodoItemProps> = ({
       <TouchableOpacity 
         style={styles.checkboxContainer} 
         onPress={() => onToggleComplete(todo.id)}
+        onLongPress={showTooltip}
+        delayLongPress={500}
       >
         <View style={[
           styles.checkbox,
@@ -131,76 +192,60 @@ export const TodoItem: React.FC<TodoItemProps> = ({
 
       <View style={styles.contentContainer}>
         <View style={styles.headerContainer}>
-          <Text 
+          <Text
             style={[
-              styles.title, 
-              { color: getColor('text') }, 
+              styles.title,
+              { color: getColor('text') },
               todo.completed && styles.completedText
             ]}
             numberOfLines={1}
           >
             {todo.title}
           </Text>
-          <PriorityIcon />
+          
+          <MaterialIcons
+            name={priorityInfo.icon}
+            size={16}
+            color={getColor(priorityInfo.color)}
+            style={styles.priorityIcon}
+          />
         </View>
-
+        
         {todo.description && (
-          <Text 
+          <Text
             style={[
               styles.description, 
               { color: getColor('textLight') },
               todo.completed && styles.completedText
             ]}
-            numberOfLines={2}
+            numberOfLines={1}
           >
             {todo.description}
           </Text>
         )}
 
-        <View style={styles.footerContainer}>
-          {todo.dueDate && (
-            <View style={styles.dueDateContainer}>
-              <MaterialIcons
-                name="access-time"
-                size={14}
-                color={isOverdue() ? getColor('error') : getColor('textLight')}
-                style={styles.dueDateIcon}
-              />
-              <Text
-                style={[
-                  styles.dueDate,
-                  { color: getColor('textLight') },
-                  isOverdue() && { color: getColor('error') },
-                  todo.completed && styles.completedText
-                ]}
-              >
-                {formatDueDate(todo.dueDate)}
-              </Text>
-            </View>
-          )}
-
-          {todo.tags && todo.tags.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {todo.tags.slice(0, 2).map((tag, index) => (
-                <View 
-                  key={index} 
-                  style={[
-                    styles.tag, 
-                    { backgroundColor: getColor('primary') }
-                  ]}
-                >
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
-              {todo.tags.length > 2 && (
-                <Text style={[styles.moreTagsText, { color: getColor('textLight') }]}>
-                  +{todo.tags.length - 2}
-                </Text>
-              )}
-            </View>
-          )}
-        </View>
+        {/* Показваме информация за задачи на открито */}
+        {todo.isOutdoor && !todo.description && (
+          <Text
+            style={[
+              styles.description, 
+              { color: getColor('accent') },
+              todo.completed && styles.completedText
+            ]}
+            numberOfLines={1}
+          >
+            Задача на открито
+          </Text>
+        )}
       </View>
+
+      {/* Tooltip за чекбокса */}
+      <Tooltip 
+        visible={tooltipVisible}
+        onClose={hideTooltip}
+        text="Натиснете, за да маркирате задачата като изпълнена"
+        position={tooltipPosition}
+      />
     </TouchableOpacity>
   );
 };
@@ -209,11 +254,19 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     padding: SPACING.m,
+    marginBottom: SPACING.s,
     borderRadius: BORDER_RADIUS.m,
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   checkboxContainer: {
     marginRight: SPACING.m,
@@ -238,51 +291,19 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONT_SIZE.m,
-    fontWeight: FONT_WEIGHT.bold as any,
+    fontWeight: FONT_WEIGHT.medium as "500",
     flex: 1,
     marginRight: SPACING.xs,
   },
   description: {
     fontSize: FONT_SIZE.s,
-    marginBottom: SPACING.s,
-    lineHeight: 20,
-  },
-  footerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dueDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dueDateIcon: {
-    marginRight: SPACING.xs,
-  },
-  dueDate: {
-    fontSize: FONT_SIZE.xs,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tag: {
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.s,
-    marginLeft: SPACING.xs,
-  },
-  tagText: {
-    color: '#FFFFFF',
-    fontSize: FONT_SIZE.xs,
-    fontWeight: FONT_WEIGHT.medium as any,
-  },
-  moreTagsText: {
-    fontSize: FONT_SIZE.xs,
-    marginLeft: SPACING.xs,
+    marginBottom: SPACING.xs,
   },
   completedText: {
     textDecorationLine: 'line-through',
     opacity: 0.7,
+  },
+  priorityIcon: {
+    marginLeft: SPACING.s,
   },
 }); 

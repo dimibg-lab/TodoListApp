@@ -13,6 +13,7 @@ export type MainTabParamList = {
   Calendar: undefined;
   Statistics: undefined;
   Settings: undefined;
+  More: undefined;
 };
 
 export type HomeStackParamList = {
@@ -28,11 +29,38 @@ export type TodoListsStackParamList = {
   AddEditList: { listId?: string };
 };
 
+export type CalendarStackParamList = {
+  CalendarScreen: undefined;
+};
+
+export type StatisticsStackParamList = {
+  StatisticsScreen: undefined;
+};
+
+export type IdeasStackParamList = {
+  IdeaListScreen: undefined;
+  IdeaDetails: { ideaId: string };
+  AddEditIdea: { ideaId?: string };
+};
+
 export type SettingsStackParamList = {
   SettingsScreen: undefined;
   ThemeSettings: undefined;
   NotificationSettings: undefined;
+  LocationSettings: undefined;
   About: undefined;
+  NotificationSound: { type: 'default' | 'task' | 'urgent' | 'reminder' | 'dailySummary' };
+};
+
+export type MoreStackParamList = {
+  MoreScreen: undefined;
+  Ideas: undefined;
+  Weather: undefined;
+  Quotes: undefined;
+  Statistics: undefined;
+  Priorities: undefined;
+  Export: undefined;
+  Help: undefined;
 };
 
 // Типове за пропс-ите на екраните
@@ -47,7 +75,17 @@ export type TodoListsScreenProps = NativeStackScreenProps<TodoListsStackParamLis
 export type TodoListScreenProps = NativeStackScreenProps<TodoListsStackParamList, 'TodoList'>;
 export type AddEditListScreenProps = NativeStackScreenProps<TodoListsStackParamList, 'AddEditList'>;
 
+export type CalendarScreenProps = NativeStackScreenProps<CalendarStackParamList, 'CalendarScreen'>;
+export type StatisticsScreenProps = NativeStackScreenProps<StatisticsStackParamList, 'StatisticsScreen'>;
+
 export type SettingsScreenProps = NativeStackScreenProps<SettingsStackParamList, 'SettingsScreen'>;
 export type ThemeSettingsScreenProps = NativeStackScreenProps<SettingsStackParamList, 'ThemeSettings'>;
 export type NotificationSettingsScreenProps = NativeStackScreenProps<SettingsStackParamList, 'NotificationSettings'>;
-export type AboutScreenProps = NativeStackScreenProps<SettingsStackParamList, 'About'>; 
+export type LocationSettingsScreenProps = NativeStackScreenProps<SettingsStackParamList, 'LocationSettings'>;
+export type AboutScreenProps = NativeStackScreenProps<SettingsStackParamList, 'About'>;
+
+export type IdeasScreenProps = NativeStackScreenProps<IdeasStackParamList, 'IdeaListScreen'>;
+export type IdeaDetailsScreenProps = NativeStackScreenProps<IdeasStackParamList, 'IdeaDetails'>;
+export type AddEditIdeaScreenProps = NativeStackScreenProps<IdeasStackParamList, 'AddEditIdea'>;
+
+export type MoreScreenProps = NativeStackScreenProps<MoreStackParamList, 'MoreScreen'>; 
